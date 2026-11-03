@@ -374,7 +374,17 @@ $('orderForm').addEventListener('submit',function(e){
  .then(()=>{
    const sentIds=JSON.parse(localStorage.getItem('waistShaperTrackedOrderIds')||'[]');
    if(!sentIds.includes(orderId)){
-     if(window.ttq){window.ttq.track('Purchase',{value:total,currency:'PKR',contents:[{content_id:'waist-shaper',content_type:'product',content_name:'Waist Shaper',quantity:deal.quantity,price:deal.price}]});}
+     // TikTok standard event for a completed order/payment is CompletePayment.
+     // Keep a local order-id guard so refresh/back navigation cannot fire it again.
+     if(window.ttq && typeof window.ttq.track === 'function'){
+       window.ttq.track('CompletePayment',{
+         value:total,
+         currency:'PKR',
+         order_id:orderId,
+         content_type:'product',
+         contents:[{content_id:'waist-shaper',content_name:'Waist Shaper',quantity:deal.quantity,price:deal.price}]
+       });
+     }
      sentIds.push(orderId);
      localStorage.setItem('waistShaperTrackedOrderIds',JSON.stringify(sentIds.slice(-500)));
    }
