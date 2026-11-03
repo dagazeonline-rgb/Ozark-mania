@@ -6,7 +6,7 @@
 <meta name="description" content="Adjustable waist shaper belt. Order online in Pakistan with cash on delivery.">
 <meta name="theme-color" content="#17151b">
 <script>
-!function(w,d,t){w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];ttq.methods=["page","track","identify","instances","debug","on","off","once","ready","alias","group","enableCookie","disableCookie","holdConsent","revokeConsent","grantConsent"];ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}};for(var i=0;i<ttq.methods.length;i++)ttq.setAndDefer(ttq,ttq.methods[i]);ttq.load=function(e,n){var r="https://analytics.tiktok.com/i18n/pixel/events.js";ttq._i=ttq._i||{};ttq._i[e]=[];ttq._i[e]._u=r;ttq._t=ttq._t||{};ttq._t[e]=+new Date;ttq._o=ttq._o||{};ttq._o[e]=n||{};var s=d.createElement("script");s.type="text/javascript";s.async=true;s.src=r+"?sdkid="+e+"&lib="+t;var f=d.getElementsByTagName("script")[0];f.parentNode.insertBefore(s,f)};ttq.load("DBKIP0BC77UCRTSK0H30");ttq.page()}(window,document,"ttq");
+!function(w,d,t){w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];ttq.methods=["page","track","identify","instances","debug","on","off","once","ready","alias","group","enableCookie","disableCookie","holdConsent","revokeConsent","grantConsent"];ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}};for(var i=0;i<ttq.methods.length;i++)ttq.setAndDefer(ttq,ttq.methods[i]);ttq.load=function(e,n){var r="https://analytics.tiktok.com/i18n/pixel/events.js";ttq._i=ttq._i||{};ttq._i[e]=[];ttq._i[e]._u=r;ttq._t=ttq._t||{};ttq._t[e]=+new Date;ttq._o=ttq._o||{};ttq._o[e]=n||{};var s=d.createElement("script");s.type="text/javascript";s.async=true;s.src=r+"?sdkid="+e+"&lib="+t;var f=d.getElementsByTagName("script")[0];f.parentNode.insertBefore(s,f)};ttq.load("DBEIRO3C77UF910620V0");ttq.page()}(window,document,"ttq");
 </script>
 <style>
 :root{--pink:#f02e78;--deep:#17151b;--cream:#fff7f9;--ink:#24212a;--muted:#716b75;--line:#f1dce5}
@@ -358,7 +358,9 @@ $('orderForm').addEventListener('submit',function(e){
  }
  const deal=selectedDeal(), total=deal.price+DELIVERY;
  const fullAddress=[$('house').value.trim(),$('address').value.trim(),'Near '+$('landmark').value.trim(),$('city').value.trim()].filter(Boolean).join(', ');
+ const orderId='WS-'+Date.now()+'-'+Math.random().toString(36).slice(2,8).toUpperCase();
  const payload={
+  orderId:orderId,
   name:$('name').value.trim(),phone:phone,
   house:$('house').value.trim(),address:$('address').value.trim(),
   fullAddress:fullAddress,landmark:$('landmark').value.trim(),city:$('city').value.trim(),
@@ -367,12 +369,27 @@ $('orderForm').addEventListener('submit',function(e){
  };
  const btn=$('submitBtn');btn.disabled=true;btn.textContent='SENDING ORDER...';
  $('notice').style.display='block';$('notice').style.background='#f1fff5';$('notice').style.color='#16713a';$('notice').textContent='Order submit ho raha hai...';
- if(window.ttq && !window.__purchaseSent){window.__purchaseSent=true;window.ttq.track('Purchase',{value:total,currency:'PKR',contents:[{content_id:'waist-shaper',content_type:'product',content_name:'Waist Shaper',quantity:deal.quantity,price:deal.price}]});}
- fetch(SHEET_ENDPOINT,{method:'POST',mode:'no-cors',keepalive:true,headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)}).catch(err=>console.error(err));
- orderedPhones.push(normalizedPhone);localStorage.setItem('waistShaperOrderedPhones',JSON.stringify([...new Set(orderedPhones)]));
- history.pushState({thankYou:true},'',location.href.split('#')[0]+'#thank-you');
- window.addEventListener('popstate',()=>location.reload());
- document.body.innerHTML=`<main style="min-height:100vh;display:grid;place-items:center;background:#f5f3ee;padding:22px;font-family:Arial"><div style="max-width:520px;background:white;border:1px solid #e5dfd3;border-radius:24px;padding:34px;text-align:center;box-shadow:0 20px 60px #17232d15"><div style="font-size:54px;color:#b68b52">✓</div><h1 style="color:#17232d">Thank You!</h1><p>Your order has been received.</p><div style="background:#f7f4ed;border-radius:14px;padding:15px;margin:18px 0"><b>${deal.label}</b><br><br>COD Total: <b>${money(total)}</b><br><small>${payload.fullAddress}</small></div><p>Hamari team aap se order confirmation ke liye rabta karegi.</p><a href="#" onclick="event.preventDefault();window.location.reload()" style="display:inline-block;background:#17232d;color:#fff;text-decoration:none;padding:13px 22px;border-radius:10px;font-weight:bold">Back to website</a></div></main>`;
+ // Send the order first. Fire TikTok Purchase only after the request completes.
+ fetch(SHEET_ENDPOINT,{method:'POST',mode:'no-cors',keepalive:true,headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)})
+ .then(()=>{
+   const sentIds=JSON.parse(localStorage.getItem('waistShaperTrackedOrderIds')||'[]');
+   if(!sentIds.includes(orderId)){
+     if(window.ttq){window.ttq.track('Purchase',{value:total,currency:'PKR',contents:[{content_id:'waist-shaper',content_type:'product',content_name:'Waist Shaper',quantity:deal.quantity,price:deal.price}]});}
+     sentIds.push(orderId);
+     localStorage.setItem('waistShaperTrackedOrderIds',JSON.stringify(sentIds.slice(-500)));
+   }
+   orderedPhones.push(normalizedPhone);
+   localStorage.setItem('waistShaperOrderedPhones',JSON.stringify([...new Set(orderedPhones)]));
+   history.pushState({thankYou:true},'',location.href.split('#')[0]+'#thank-you');
+   window.addEventListener('popstate',()=>location.reload());
+   document.body.innerHTML=`<main style="min-height:100vh;display:grid;place-items:center;background:#f5f3ee;padding:22px;font-family:Arial"><div style="max-width:520px;background:white;border:1px solid #e5dfd3;border-radius:24px;padding:34px;text-align:center;box-shadow:0 20px 60px #17232d15"><div style="font-size:54px;color:#b68b52">✓</div><h1 style="color:#17232d">Thank You!</h1><p>Your order has been received.</p><div style="background:#f7f4ed;border-radius:14px;padding:15px;margin:18px 0"><b>${deal.label}</b><br><br>COD Total: <b>${money(total)}</b><br><small>${payload.fullAddress}</small></div><p>Hamari team aap se order confirmation ke liye rabta karegi.</p><a href="#" onclick="event.preventDefault();window.location.reload()" style="display:inline-block;background:#17232d;color:#fff;text-decoration:none;padding:13px 22px;border-radius:10px;font-weight:bold">Back to website</a></div></main>`;
+ })
+ .catch(err=>{
+   console.error('Order submission failed:',err);
+   btn.disabled=false;btn.textContent='TRY AGAIN — '+money(total);
+   $('notice').style.display='block';$('notice').style.background='#fff4f4';$('notice').style.color='#a31d35';
+   $('notice').textContent='Order send nahi ho saka. Internet check karke dobara try karein. Agar sheet mein order aa gaya ho to dobara submit na karein.';
+ });
 });
 const observer=new IntersectionObserver(entries=>entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add('visible');observer.unobserve(e.target);}}),{threshold:.12});
 document.querySelectorAll('.reveal').forEach(el=>observer.observe(el));
