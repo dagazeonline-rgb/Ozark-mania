@@ -343,63 +343,110 @@ function updateDealTotal(){
 }
 $('deal').addEventListener('change',updateDealTotal);
 updateDealTotal();
-$('orderForm').addEventListener('submit',function(e){
+$('orderForm').addEventListener('submit', async function(e){
  e.preventDefault();
- if(!this.reportValidity())return;
+ if(!this.reportValidity()) return;
+
+ const btn=$('submitBtn');
+ if(btn.disabled) return; // blocks rapid double-clicks for this submission
+
  const phone=$('phone').value.trim();
  const digits=phone.replace(/\D/g,'');
  if(!(digits.length===11&&digits.startsWith('03')) && !(digits.length===12&&digits.startsWith('923'))){
-   $('notice').style.display='block';$('notice').textContent='Please valid Pakistani mobile number enter karein (03XXXXXXXXX).';return;
+   $('notice').style.display='block';
+   $('notice').textContent='Please valid Pakistani mobile number enter karein (03XXXXXXXXX).';
+   return;
  }
- const normalizedPhone=digits.length===12&&digits.startsWith('92')?'0'+digits.slice(2):digits;
- const orderedPhones=JSON.parse(localStorage.getItem('waistShaperOrderedPhones')||'[]');
- if(orderedPhones.includes(normalizedPhone)){
-   $('notice').style.display='block';$('notice').style.background='#fff4f2';$('notice').style.color='#a52a2a';$('notice').textContent='Is mobile number se pehle order place ho chuka hai. Dobara order place nahi ho sakta.';return;
- }
- const deal=selectedDeal(), total=deal.price+DELIVERY;
- const fullAddress=[$('house').value.trim(),$('address').value.trim(),'Near '+$('landmark').value.trim(),$('city').value.trim()].filter(Boolean).join(', ');
+
+ const deal=selectedDeal();
+ const total=deal.price+DELIVERY;
+ const house=$('house').value.trim();
+ const streetAddress=$('address').value.trim();
+ const landmark=$('landmark').value.trim();
+ const city=$('city').value.trim();
+ const fullAddress=[house,streetAddress,'Near '+landmark,city].filter(Boolean).join(', ');
  const orderId='WS-'+Date.now()+'-'+Math.random().toString(36).slice(2,8).toUpperCase();
+
+ // Send all common Apps Script field names as well as the detailed order fields.
  const payload={
-  orderId:orderId,
-  name:$('name').value.trim(),phone:phone,
-  house:$('house').value.trim(),address:$('address').value.trim(),
-  fullAddress:fullAddress,landmark:$('landmark').value.trim(),city:$('city').value.trim(),
-  product:'Waist Shaper',deal:deal.label,quantity:deal.quantity,size:$('size').value,
-  price:deal.price,deliveryCharges:DELIVERY,total:total,currency:'PKR'
+   orderId:orderId,
+   createdAt:new Date().toISOString(),
+   name:$('name').value.trim(),
+   phone:phone,
+   house:house,
+   address:fullAddress,
+   fullAddress:fullAddress,
+   streetAddress:streetAddress,
+   landmark:landmark,
+   city:city,
+   product:'Waist Shaper',
+   deal:deal.label,
+   pack:deal.label,
+   quantity:deal.quantity,
+   size:$('size').value,
+   price:deal.price,
+   subtotal:deal.price,
+   deliveryCharges:DELIVERY,
+   delivery:DELIVERY,
+   total:total,
+   currency:'PKR',
+   paymentMethod:'Cash on Delivery'
  };
- const btn=$('submitBtn');btn.disabled=true;btn.textContent='SENDING ORDER...';
- $('notice').style.display='block';$('notice').style.background='#f1fff5';$('notice').style.color='#16713a';$('notice').textContent='Order submit ho raha hai...';
- // Send the order first. Fire TikTok Purchase only after the request completes.
- fetch(SHEET_ENDPOINT,{method:'POST',mode:'no-cors',keepalive:true,headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)})
- .then(()=>{
+
+ btn.disabled=true;
+ btn.textContent='SENDING ORDER...';
+ $('notice').style.display='block';
+ $('notice').style.background='#f1fff5';
+ $('notice').style.color='#16713a';
+ $('notice').textContent='Order submit ho raha hai...';
+
+ try {
+   // no-cors is required for many Apps Script web-app endpoints.
+   // The browser cannot read the response in no-cors mode, so this confirms
+   // that the request was sent, not that the spreadsheet accepted it.
+   await fetch(SHEET_ENDPOINT,{
+     method:'POST',
+     mode:'no-cors',
+     keepalive:true,
+     headers:{'Content-Type':'text/plain;charset=utf-8'},
+     body:JSON.stringify(payload)
+   });
+
+   // Fire one TikTok Purchase-equivalent event for this newly generated order.
+   // This site uses COD, so the event represents an order placed, not money collected.
    const sentIds=JSON.parse(localStorage.getItem('waistShaperTrackedOrderIds')||'[]');
    if(!sentIds.includes(orderId)){
-     // TikTok standard event for a completed order/payment is CompletePayment.
-     // Keep a local order-id guard so refresh/back navigation cannot fire it again.
-     if(window.ttq && typeof window.ttq.track === 'function'){
+     if(window.ttq && typeof window.ttq.track==='function'){
        window.ttq.track('CompletePayment',{
          value:total,
          currency:'PKR',
          order_id:orderId,
          content_type:'product',
-         contents:[{content_id:'waist-shaper',content_name:'Waist Shaper',quantity:deal.quantity,price:deal.price}]
+         contents:[{
+           content_id:'waist-shaper',
+           content_name:'Waist Shaper',
+           quantity:deal.quantity,
+           price:deal.price
+         }]
        });
      }
      sentIds.push(orderId);
      localStorage.setItem('waistShaperTrackedOrderIds',JSON.stringify(sentIds.slice(-500)));
    }
-   orderedPhones.push(normalizedPhone);
-   localStorage.setItem('waistShaperOrderedPhones',JSON.stringify([...new Set(orderedPhones)]));
-   history.pushState({thankYou:true},'',location.href.split('#')[0]+'#thank-you');
+
+   history.pushState({thankYou:true},'',
+     location.href.split('#')[0]+'#thank-you');
    window.addEventListener('popstate',()=>location.reload());
-   document.body.innerHTML=`<main style="min-height:100vh;display:grid;place-items:center;background:#f5f3ee;padding:22px;font-family:Arial"><div style="max-width:520px;background:white;border:1px solid #e5dfd3;border-radius:24px;padding:34px;text-align:center;box-shadow:0 20px 60px #17232d15"><div style="font-size:54px;color:#b68b52">✓</div><h1 style="color:#17232d">Thank You!</h1><p>Your order has been received.</p><div style="background:#f7f4ed;border-radius:14px;padding:15px;margin:18px 0"><b>${deal.label}</b><br><br>COD Total: <b>${money(total)}</b><br><small>${payload.fullAddress}</small></div><p>Hamari team aap se order confirmation ke liye rabta karegi.</p><a href="#" onclick="event.preventDefault();window.location.reload()" style="display:inline-block;background:#17232d;color:#fff;text-decoration:none;padding:13px 22px;border-radius:10px;font-weight:bold">Back to website</a></div></main>`;
- })
- .catch(err=>{
-   console.error('Order submission failed:',err);
-   btn.disabled=false;btn.textContent='TRY AGAIN — '+money(total);
-   $('notice').style.display='block';$('notice').style.background='#fff4f4';$('notice').style.color='#a31d35';
-   $('notice').textContent='Order send nahi ho saka. Internet check karke dobara try karein. Agar sheet mein order aa gaya ho to dobara submit na karein.';
- });
+   document.body.innerHTML=`<main style="min-height:100vh;display:grid;place-items:center;background:#f5f3ee;padding:22px;font-family:Arial"><div style="max-width:520px;background:white;border:1px solid #e5dfd3;border-radius:24px;padding:34px;text-align:center;box-shadow:0 20px 60px #17232d15"><div style="font-size:54px;color:#b68b52">✓</div><h1 style="color:#17232d">Thank You!</h1><p>Your order has been received.</p><div style="background:#f7f4ed;border-radius:14px;padding:15px;margin:18px 0"><b>${deal.label}</b><br><br>Order ID: <b>${orderId}</b><br>COD Total: <b>${money(total)}</b><br><small>${fullAddress}</small></div><p>Hamari team aap se order confirmation ke liye rabta karegi.</p><a href="#" onclick="event.preventDefault();window.location.reload()" style="display:inline-block;background:#17232d;color:#fff;text-decoration:none;padding:13px 22px;border-radius:10px;font-weight:bold">Back to website</a></div></main>`;
+ } catch(err) {
+   console.error('Order submission request failed:',err);
+   btn.disabled=false;
+   btn.textContent='TRY AGAIN — '+money(total);
+   $('notice').style.display='block';
+   $('notice').style.background='#fff4f4';
+   $('notice').style.color='#a31d35';
+   $('notice').textContent='Order request send nahi ho saka. Internet check karke dobara try karein.';
+ }
 });
 const observer=new IntersectionObserver(entries=>entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add('visible');observer.unobserve(e.target);}}),{threshold:.12});
 document.querySelectorAll('.reveal').forEach(el=>observer.observe(el));
