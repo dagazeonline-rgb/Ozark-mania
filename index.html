@@ -545,6 +545,28 @@ const SHEET_ENDPOINT = "https://script.google.com/macros/s/AKfycbxZKlx4eIQpgtKeX
 const DELIVERY = 200;
 const $ = id => document.getElementById(id);
 function money(n){return 'Rs. '+Number(n).toLocaleString('en-PK');}
+function sendOrderToSheet(payload){
+ return new Promise((resolve,reject)=>{
+   const callbackName='wsOrderCallback_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);
+   const script=document.createElement('script');
+   let finished=false;
+   const cleanup=()=>{
+     if(finished) return;
+     finished=true;
+     clearTimeout(timer);
+     script.remove();
+     try{delete window[callbackName];}catch(_){window[callbackName]=undefined;}
+   };
+   const timer=setTimeout(()=>{cleanup();reject(new Error('Google Sheet response timeout. Deployment URL / access check karein.'));},20000);
+   window[callbackName]=(result)=>{cleanup();resolve(result);};
+   script.onerror=()=>{cleanup();reject(new Error('Google Apps Script endpoint load nahi hua.'));};
+   const params=new URLSearchParams();
+   params.set('callback',callbackName);
+   params.set('payload',JSON.stringify(payload));
+   script.src=SHEET_ENDPOINT+'?'+params.toString();
+   document.head.appendChild(script);
+ });
+}
 function selectedDeal(){
  const option=$('deal').options[$('deal').selectedIndex];
  return {price:Number(option.value),quantity:Number(option.dataset.qty),label:option.textContent.trim()};
@@ -619,29 +641,25 @@ $('orderForm').addEventListener('submit', async function(e){
  $('notice').textContent='Order submit ho raha hai...';
 
  try {
-   // no-cors is required for many Apps Script web-app endpoints.
-   // The browser cannot read the response in no-cors mode, so this confirms
-   // that the request was sent, not that the spreadsheet accepted it.
-   await fetch(SHEET_ENDPOINT,{
-     method:'POST',
-     mode:'no-cors',
-     keepalive:true,
-     headers:{'Content-Type':'text/plain;charset=utf-8'},
-     body:JSON.stringify(payload)
-   });
+   // JSONP lets the browser receive a real success/error result from Apps Script
+   // without the opaque no-cors response that previously showed a false success.
+   const sheetResult = await sendOrderToSheet(payload);
+   if (!sheetResult || sheetResult.success !== true) {
+     throw new Error(sheetResult && sheetResult.error ? sheetResult.error : 'Google Sheet did not confirm the order');
+   }
 
    history.pushState({thankYou:true},'',
      location.href.split('#')[0]+'#thank-you');
    window.addEventListener('popstate',()=>location.reload());
    document.body.innerHTML=`<main style="min-height:100vh;display:grid;place-items:center;background:#f5f3ee;padding:22px;font-family:Arial"><div style="max-width:520px;background:white;border:1px solid #e5dfd3;border-radius:24px;padding:34px;text-align:center;box-shadow:0 20px 60px #17232d15"><div style="font-size:54px;color:#b68b52">✓</div><h1 style="color:#17232d">Thank You!</h1><p>Your order has been received.</p><div style="background:#f7f4ed;border-radius:14px;padding:15px;margin:18px 0"><b>${deal.label}</b><br><br>Order ID: <b>${orderId}</b><br>COD Total: <b>${money(total)}</b><br><small>${fullAddress}</small></div><p>Hamari team aap se order confirmation ke liye rabta karegi.</p><a href="#" onclick="event.preventDefault();window.location.reload()" style="display:inline-block;background:#17232d;color:#fff;text-decoration:none;padding:13px 22px;border-radius:10px;font-weight:bold">Back to website</a></div></main>`;
  } catch(err) {
-   console.error('Order submission request failed:',err);
+   console.error('Order submission failed:',err);
    btn.disabled=false;
    btn.textContent='TRY AGAIN — '+money(total);
    $('notice').style.display='block';
    $('notice').style.background='#fff4f4';
    $('notice').style.color='#a31d35';
-   $('notice').textContent='Order request send nahi ho saka. Internet check karke dobara try karein.';
+   $('notice').textContent='Order Google Sheet mein save confirm nahi hua. Dobara try karein ya WhatsApp par contact karein. Error: '+(err.message||'Unknown error');
  }
 });
 const observer=new IntersectionObserver(entries=>entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add('visible');observer.unobserve(e.target);}}),{threshold:.12});
