@@ -648,6 +648,24 @@ $('orderForm').addEventListener('submit', async function(e){
      throw new Error(sheetResult && sheetResult.error ? sheetResult.error : 'Google Sheet did not confirm the order');
    }
 
+   // Fire TikTok's standard purchase event only AFTER Google Sheets confirms
+   // that this unique order has been saved. A per-order guard prevents a
+   // second browser-side fire for the same order ID in this browser session.
+   const purchaseGuardKey = 'ws_tiktok_purchase_sent_' + orderId;
+   if (!sessionStorage.getItem(purchaseGuardKey)) {
+     if (window.ttq && typeof window.ttq.track === 'function') {
+       window.ttq.track('CompletePayment', {
+         value: Number(total),
+         currency: 'PKR',
+         content_type: 'product',
+         contents: [{ content_id: 'waist-shaper', content_name: 'Waist Shaper', quantity: deal.quantity, price: Number(deal.price) }]
+       });
+       sessionStorage.setItem(purchaseGuardKey, '1');
+     } else {
+       console.warn('TikTok Pixel is not ready; Purchase event was not sent.');
+     }
+   }
+
    history.pushState({thankYou:true},'',
      location.href.split('#')[0]+'#thank-you');
    window.addEventListener('popstate',()=>location.reload());
